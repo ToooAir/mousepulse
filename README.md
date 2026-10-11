@@ -42,9 +42,37 @@ open a browser just to check the battery.
 - Windows 10 or 11 (x64)
 - A supported mouse (see below), connected through its receiver or a USB cable
 
+## Download
+
+Get the latest build from the [Releases page](https://github.com/ToooAir/mousepulse/releases/latest):
+
+- `mousepulse.exe`: the tray app. This is the only file you need.
+- `mousepulse-cli.exe`: optional debugging tool.
+- `SHA256SUMS.txt`: checksums of both files.
+
+Every release is built by [GitHub Actions](https://github.com/ToooAir/mousepulse/actions)
+from the tagged source, so you can see exactly what went into each exe.
+
+### Verify the download (optional)
+
+In PowerShell, compare the hash with the matching line in `SHA256SUMS.txt`
+(letter case doesn't matter):
+
+```powershell
+Get-FileHash .\mousepulse.exe -Algorithm SHA256
+```
+
+### "Windows protected your PC"
+
+The exe isn't code-signed, so Microsoft Defender SmartScreen may block it the first
+time you run it. Click **More info**, then **Run anyway**. Windows remembers the
+choice for that file.
+
+If you'd rather not run an unsigned binary, [build it yourself](#building).
+
 ## Usage
 
-1. Download or build `mousepulse.exe` and put it somewhere permanent, for example
+1. Put `mousepulse.exe` somewhere permanent, for example
    `C:\Tools\`. Turning on *Start with Windows* stores this path, so avoid
    `Downloads`.
 2. Run it. The battery icon appears in the notification area; if you can't see it,

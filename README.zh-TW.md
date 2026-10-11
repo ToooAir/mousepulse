@@ -34,9 +34,35 @@
 - Windows 10 或 11（x64）
 - 支援的滑鼠（見下方列表），透過接收器或 USB 線連接
 
+## 下載
+
+從 [Releases 頁面](https://github.com/ToooAir/mousepulse/releases/latest)下載最新版本：
+
+- `mousepulse.exe`：系統匣程式，一般使用只需要這個檔案。
+- `mousepulse-cli.exe`：選用的除錯工具。
+- `SHA256SUMS.txt`：兩個檔案的雜湊值。
+
+每個版本都由 [GitHub Actions](https://github.com/ToooAir/mousepulse/actions) 從對應版本的
+原始碼自動編譯，可以清楚看到每個 exe 是怎麼產生的。
+
+### 驗證下載的檔案（選用）
+
+在 PowerShell 執行下面的指令，再和 `SHA256SUMS.txt` 裡對應的那一行比對（不分大小寫）：
+
+```powershell
+Get-FileHash .\mousepulse.exe -Algorithm SHA256
+```
+
+### 「Windows 已保護您的電腦」
+
+這個 exe 沒有程式碼簽章，第一次執行時可能會被 Microsoft Defender SmartScreen 擋下。
+點選 **其他資訊**，再點 **仍要執行** 即可，Windows 之後會記住這個檔案。
+
+如果不想執行未簽章的程式，也可以[自行編譯](#編譯)。
+
 ## 使用方式
 
-1. 下載或自行編譯 `mousepulse.exe`，放到固定的位置，例如 `C:\Tools\`。
+1. 把 `mousepulse.exe` 放到固定的位置，例如 `C:\Tools\`。
    開啟「開機自動啟動」時會記住這個路徑，所以不建議放在「下載」資料夾。
 2. 執行後，電池圖示會出現在通知區域；如果沒看到，點工作列的 `^` 展開隱藏的圖示。
 3. 滑鼠移到圖示上看詳細資訊，右鍵開啟選單，左鍵立即重新整理。
