@@ -11,6 +11,11 @@
 > **非官方工具。**本專案與 VAXEE 無關，也未經其認可。
 > 文中提到的產品名稱僅用於說明相容的硬體。
 
+<p align="center">
+  <img src="docs/screenshots/icon-chinese.jpg" alt="系統匣提示文字：型號、電量 95%（充電中）約 52.3 小時、競技模式 1000Hz" height="180">
+  <img src="docs/screenshots/menu-chinese.jpg" alt="右鍵選單：競技模式、標準模式、Motion Sync、回報率、開機自動啟動、重新整理、結束" height="180">
+</p>
+
 ## 功能
 
 - **系統匣電池圖示**：填滿比例和顏色隨電量變化（綠色 ≥ 50%、橘色 20–49%、紅色 < 20%）。
