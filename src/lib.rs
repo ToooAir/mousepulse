@@ -165,28 +165,49 @@ mod hid {
     }
 
     impl Device {
-        pub fn open() -> Result<Device, String> {
-            let info = enumerate()
+        /// Open every VAXEE vendor collection. With the charging cable plugged in, both the
+        /// receiver and the cabled mouse show up, in no guaranteed order.
+        pub fn open_all() -> Vec<Result<Device, String>> {
+            enumerate()
                 .into_iter()
-                .find(|d| d.usage_page == USAGE_PAGE && d.usage == USAGE)
-                .ok_or("no VAXEE device found (VID 0x3057, usage page 0xFF05)")?;
-            if info.feature_len < 8 {
-                return Err(format!(
-                    "unexpected feature report length {}",
-                    info.feature_len
-                ));
-            }
-            let h = unsafe { open(&info.path, GENERIC_RW) }.ok_or_else(|| {
-                format!("cannot open device (GetLastError={})", unsafe {
-                    GetLastError()
+                .filter(|d| d.usage_page == USAGE_PAGE && d.usage == USAGE)
+                .map(|info| {
+                    if info.feature_len < 8 {
+                        return Err(format!(
+                            "PID {:04X}: unexpected feature report length {}",
+                            info.pid, info.feature_len
+                        ));
+                    }
+                    let h = unsafe { open(&info.path, GENERIC_RW) }.ok_or_else(|| {
+                        format!(
+                            "PID {:04X}: cannot open (GetLastError={})",
+                            info.pid,
+                            unsafe { GetLastError() }
+                        )
+                    })?;
+                    Ok(Device {
+                        h,
+                        pid: info.pid,
+                        feature_len: info.feature_len as usize,
+                        verbose: false,
+                    })
                 })
-            })?;
-            Ok(Device {
-                h,
-                pid: info.pid,
-                feature_len: info.feature_len as usize,
-                verbose: false,
-            })
+                .collect()
+        }
+
+        /// Prefer the cabled mouse: once the cable is plugged in the mouse talks over USB and
+        /// the receiver loses its link (reads time out), verified with NP-01S + receiver 2001.
+        pub fn open() -> Result<Device, String> {
+            let mut all = Device::open_all();
+            all.sort_by_key(|d| d.as_ref().map_or(2, |d| u8::from(d.is_wireless())));
+            let mut last = Err("no VAXEE device found (VID 0x3057, usage page 0xFF05)".to_string());
+            for d in all {
+                if d.is_ok() {
+                    return d;
+                }
+                last = d;
+            }
+            last
         }
 
         pub fn is_wireless(&self) -> bool {
@@ -286,7 +307,9 @@ mod hid {
             d.pid
         };
         let battery = battery_percent(d.read(CMD_BATTERY, 1)?[5]);
-        let charging = wireless && d.read(CMD_CHARGING, 1)?[5] != 0;
+        // vcc reads this in wired mode too (a cabled mouse is charging). Like its runAPI,
+        // treat an unanswered read as "not charging" instead of failing the whole status.
+        let charging = d.read(CMD_CHARGING, 1).is_ok_and(|r| r[5] != 0);
         let (standard, motion_sync) = decode_tracking(&d.read_tracking()?);
         let rate = d.read(CMD_REPORT_RATE, 1)?[5];
         Ok(Status {

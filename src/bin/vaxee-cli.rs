@@ -50,14 +50,20 @@ fn info(d: &Device) -> Result<(), String> {
         rate_name(r[5]),
         r[5]
     ));
-    if d.is_wireless() {
-        let r = d.read(CMD_CHARGING, 1)?;
-        lines.push(format!("charging      : raw {}", r[5]));
-        let r = d.read(CMD_WIRELESS, 1)?;
-        lines.push(format!("wireless link : raw {}", r[5]));
-    } else {
-        lines.push("connection    : wired (charging/link status are wireless-only)".into());
+    // Read both in wired mode too; vcc does, and a failure is informative here.
+    for (cmd, name) in [
+        (CMD_CHARGING, "charging     "),
+        (CMD_WIRELESS, "wireless link"),
+    ] {
+        match d.read(cmd, 1) {
+            Ok(r) => lines.push(format!("{name} : raw {}", r[5])),
+            Err(e) => lines.push(format!("{name} : {e}")),
+        }
     }
+    lines.push(format!(
+        "connection    : {}",
+        if d.is_wireless() { "receiver" } else { "cable" }
+    ));
 
     println!("\n{}", lines.join("\n"));
     Ok(())
@@ -89,6 +95,31 @@ fn parse_arg(arg: Option<&String>, max: u8, name: &str) -> Result<u8, String> {
 fn run(args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
         None | Some("info") => info(&open()?),
+        Some("probe") => {
+            for d in Device::open_all() {
+                let d = match d {
+                    Ok(d) => d,
+                    Err(e) => {
+                        println!("{e}");
+                        continue;
+                    }
+                };
+                match read_status(&d).map(|s| (d.pid, s)) {
+                    Ok((pid, s)) => println!(
+                        "PID {pid:04X} ({})  mouse {:04X}  battery {}%  charging {}  {} / MS {}  {}",
+                        if s.wireless { "receiver" } else { "cable" },
+                        s.mouse_pid,
+                        s.battery,
+                        s.charging,
+                        if s.standard { "standard" } else { "competitive" },
+                        if s.motion_sync { "on" } else { "off" },
+                        rate_name(s.rate),
+                    ),
+                    Err(e) => println!("PID {:04X}: {e}", d.pid),
+                }
+            }
+            Ok(())
+        }
         Some("list") => {
             let all = enumerate();
             if all.is_empty() {
@@ -133,6 +164,7 @@ const HELP: &str = "\
 usage: vaxee-cli [command]
   info              read PID, firmware, battery, mode, report rate (default)
   list              list all HID collections with VID 0x3057
+  probe             read status from every VAXEE device (receiver and cable)
   mode <1-4>        1=Competitive/MS off  2=Standard/MS off
                     3=Competitive/MS on   4=Standard/MS on
   rate <1-5>        1=500Hz 2=1000Hz 3=2000Hz 4=4000Hz 5=8000Hz (3954)
