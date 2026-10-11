@@ -2,8 +2,8 @@
 
 #![windows_subsystem = "windows"]
 
+use mousepulse::{i18n::Strings, *};
 use std::{cell::RefCell, mem, ptr, sync::OnceLock};
-use vaxee_tool::{i18n::Strings, *};
 use windows_sys::Win32::{
     Foundation::*,
     Globalization::GetUserDefaultUILanguage,
@@ -25,7 +25,10 @@ const ID_AUTOSTART: usize = 5;
 const ID_MOTION_SYNC: usize = 6;
 const ID_RATE_BASE: usize = 10; // + rate index 1-5
 const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
-const RUN_VALUE: &str = "VaxeeTool";
+const RUN_VALUE: &str = "MousePulse";
+/// Run value used before the rename to MousePulse.
+const LEGACY_RUN_VALUE: &str = "VaxeeTool";
+const APP_NAME: &str = "MousePulse";
 
 struct App {
     status: Result<Status, Error>,
@@ -288,6 +291,21 @@ fn set_autostart(on: bool) -> Result<(), String> {
     }
 }
 
+/// Builds before the rename registered autostart as "VaxeeTool" pointing at
+/// vaxee-tool.exe. Move that choice to the new entry so only this exe starts.
+fn migrate_legacy_autostart() {
+    let err = unsafe {
+        RegDeleteKeyValueW(
+            HKEY_CURRENT_USER,
+            wide(RUN_KEY).as_ptr(),
+            wide(LEGACY_RUN_VALUE).as_ptr(),
+        )
+    };
+    if err == ERROR_SUCCESS {
+        let _ = set_autostart(true);
+    }
+}
+
 /// Competitive => 4000Hz, Standard => 1000Hz, keeping the current Motion Sync setting.
 fn switch_mode(standard: bool) -> Result<(), Error> {
     let d = Device::open()?;
@@ -401,7 +419,7 @@ unsafe fn show_menu(hwnd: HWND) {
         MessageBoxW(
             hwnd,
             wide(&e).as_ptr(),
-            wide("VAXEE").as_ptr(),
+            wide(APP_NAME).as_ptr(),
             MB_ICONWARNING,
         );
     }
@@ -436,20 +454,21 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
 fn main() {
     unsafe {
         // One instance per user session; the mutex lives until the process exits.
-        CreateMutexW(ptr::null(), 0, wide("Local\\VaxeeTray").as_ptr());
+        CreateMutexW(ptr::null(), 0, wide("Local\\MousePulse").as_ptr());
         if GetLastError() == ERROR_ALREADY_EXISTS {
             MessageBoxW(
                 ptr::null_mut(),
                 wide(t().already_running).as_ptr(),
-                wide("VAXEE").as_ptr(),
+                wide(APP_NAME).as_ptr(),
                 MB_ICONINFORMATION,
             );
             return;
         }
+        migrate_legacy_autostart();
         SetProcessDPIAware(); // crisp icon at the real small-icon size
         TASKBAR_CREATED = RegisterWindowMessageW(wide("TaskbarCreated").as_ptr());
 
-        let class = wide("VaxeeTray");
+        let class = wide(APP_NAME);
         let wc = WNDCLASSW {
             lpfnWndProc: Some(wndproc),
             hInstance: GetModuleHandleW(ptr::null()),

@@ -1,7 +1,7 @@
 //! Protocol debugging CLI: prints every TX/RX packet.
 
+use mousepulse::*;
 use std::env;
-use vaxee_tool::*;
 
 fn open() -> Result<Device, String> {
     let mut d = Device::open()?;
@@ -162,7 +162,7 @@ fn run(args: &[String]) -> Result<(), String> {
 }
 
 const HELP: &str = "\
-usage: vaxee-cli [command]
+usage: mousepulse-cli [command]
   info              read PID, firmware, battery, mode, report rate (default)
   list              list all HID collections with VID 0x3057
   probe             read status from every VAXEE device (receiver and cable)

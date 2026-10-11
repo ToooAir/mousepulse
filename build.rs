@@ -27,8 +27,8 @@ BEGIN
   BEGIN
     BLOCK "040904B0"
     BEGIN
-      VALUE "FileDescription", "VAXEE Battery Tray"
-      VALUE "ProductName", "vaxee-tool"
+      VALUE "FileDescription", "MousePulse"
+      VALUE "ProductName", "MousePulse"
       VALUE "FileVersion", "{version}"
       VALUE "ProductVersion", "{version}"
     END
