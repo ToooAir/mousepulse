@@ -39,11 +39,23 @@ const WIRELESS_PIDS: [u16; 4] = [0x1001, 0x1002, 0x2001, 0x2002];
 #[derive(Debug, Clone, PartialEq)]
 pub enum Error {
     NotFound,
-    Open { pid: u16, code: u32 },
-    BadReportLength { pid: u16, len: u16 },
-    NoReply { cmd: u8 },
+    Open {
+        pid: u16,
+        code: u32,
+    },
+    BadReportLength {
+        pid: u16,
+        len: u16,
+    },
+    NoReply {
+        cmd: u8,
+    },
+    /// The receiver answered but has no link to the mouse (off or out of range).
+    LinkDown,
     DataTooLong,
-    RateTooHigh { max: u8 },
+    RateTooHigh {
+        max: u8,
+    },
     StandardNeedsReceiver,
 }
 
@@ -58,6 +70,7 @@ impl std::fmt::Display for Error {
                 write!(f, "PID {pid:04X}: unexpected feature report length {len}")
             }
             Error::NoReply { cmd } => write!(f, "cmd 0x{cmd:02X}: no valid reply after 5 tries"),
+            Error::LinkDown => write!(f, "receiver has no link to the mouse (off or out of range)"),
             Error::DataTooLong => write!(f, "data too long for one report"),
             Error::RateTooHigh { max } => write!(f, "this mode supports up to {}", rate_name(*max)),
             Error::StandardNeedsReceiver => {
@@ -342,6 +355,11 @@ mod hid {
         let wireless = d.is_wireless();
         // Mouse PID and charging status are wireless-only commands; wired PID is the HID PID itself.
         let mouse_pid = if wireless {
+            // The receiver answers 0x0F itself. With the mouse off, every mouse command
+            // would time out (~3.5 s per refresh, measured), so bail out early.
+            if d.read(CMD_WIRELESS, 1)?[5] == 0 {
+                return Err(Error::LinkDown);
+            }
             let r = d.read(CMD_MOUSE_PID, 2)?;
             u16::from_le_bytes([r[5], r[6]])
         } else {

@@ -176,7 +176,7 @@ impl Strings {
         match e {
             Error::NotFound => self.err_not_found.into(),
             Error::Open { code, .. } => self.err_open.replace("{code}", &code.to_string()),
-            Error::NoReply { .. } => self.err_no_reply.into(),
+            Error::NoReply { .. } | Error::LinkDown => self.err_no_reply.into(),
             Error::RateTooHigh { max } => self
                 .err_rate_too_high
                 .replace("{max}", crate::rate_name(*max)),
