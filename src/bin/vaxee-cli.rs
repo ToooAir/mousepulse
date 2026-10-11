@@ -154,7 +154,8 @@ fn run(args: &[String]) -> Result<(), String> {
                 .iter()
                 .map(|s| parse_hex(s))
                 .collect::<Result<_, _>>()?;
-            open()?.transact(b[0], b[1], b[2], &b[3..]).map(|_| ())
+            open()?.transact(b[0], b[1], b[2], &b[3..])?;
+            Ok(())
         }
         _ => Err(HELP.into()),
     }

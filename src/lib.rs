@@ -4,6 +4,7 @@
 //! Response uses the same layout, so data starts at byte 5.
 
 mod bat_table;
+pub mod i18n;
 pub mod icon;
 #[cfg(windows)]
 pub use hid::*;
@@ -32,6 +33,49 @@ pub const RATE_8000: u8 = 5;
 
 // Receiver PIDs; anything else is a mouse plugged in by cable (paramter.js DefWireless).
 const WIRELESS_PIDS: [u16; 4] = [0x1001, 0x1002, 0x2001, 0x2002];
+
+/// Protocol and device errors. `Display` is English for the CLI; the tray
+/// translates them with `i18n::Strings::error`.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Error {
+    NotFound,
+    Open { pid: u16, code: u32 },
+    BadReportLength { pid: u16, len: u16 },
+    NoReply { cmd: u8 },
+    DataTooLong,
+    RateTooHigh { max: u8 },
+    StandardNeedsReceiver,
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Error::NotFound => write!(f, "no VAXEE device found (VID 0x3057, usage page 0xFF05)"),
+            Error::Open { pid, code } => {
+                write!(f, "PID {pid:04X}: cannot open (GetLastError={code})")
+            }
+            Error::BadReportLength { pid, len } => {
+                write!(f, "PID {pid:04X}: unexpected feature report length {len}")
+            }
+            Error::NoReply { cmd } => write!(f, "cmd 0x{cmd:02X}: no valid reply after 5 tries"),
+            Error::DataTooLong => write!(f, "data too long for one report"),
+            Error::RateTooHigh { max } => write!(f, "this mode supports up to {}", rate_name(*max)),
+            Error::StandardNeedsReceiver => {
+                write!(
+                    f,
+                    "standard mode is only available over the wireless receiver"
+                )
+            }
+        }
+    }
+}
+
+/// Lets the CLI keep `Result<_, String>` and use `?` on protocol calls.
+impl From<Error> for String {
+    fn from(e: Error) -> String {
+        e.to_string()
+    }
+}
 
 // Win32 HID access; the pure helpers below stay portable so tests run on any host.
 #[cfg(windows)]
@@ -167,23 +211,20 @@ mod hid {
     impl Device {
         /// Open every VAXEE vendor collection. With the charging cable plugged in, both the
         /// receiver and the cabled mouse show up, in no guaranteed order.
-        pub fn open_all() -> Vec<Result<Device, String>> {
+        pub fn open_all() -> Vec<Result<Device, Error>> {
             enumerate()
                 .into_iter()
                 .filter(|d| d.usage_page == USAGE_PAGE && d.usage == USAGE)
                 .map(|info| {
                     if info.feature_len < 8 {
-                        return Err(format!(
-                            "PID {:04X}: unexpected feature report length {}",
-                            info.pid, info.feature_len
-                        ));
+                        return Err(Error::BadReportLength {
+                            pid: info.pid,
+                            len: info.feature_len,
+                        });
                     }
-                    let h = unsafe { open(&info.path, GENERIC_RW) }.ok_or_else(|| {
-                        format!(
-                            "PID {:04X}: cannot open (GetLastError={})",
-                            info.pid,
-                            unsafe { GetLastError() }
-                        )
+                    let h = unsafe { open(&info.path, GENERIC_RW) }.ok_or_else(|| Error::Open {
+                        pid: info.pid,
+                        code: unsafe { GetLastError() },
                     })?;
                     Ok(Device {
                         h,
@@ -197,10 +238,10 @@ mod hid {
 
         /// Prefer the cabled mouse: once the cable is plugged in the mouse talks over USB and
         /// the receiver loses its link (reads time out), verified with NP-01S + receiver 2001.
-        pub fn open() -> Result<Device, String> {
+        pub fn open() -> Result<Device, Error> {
             let mut all = Device::open_all();
             all.sort_by_key(|d| d.as_ref().map_or(2, |d| u8::from(d.is_wireless())));
-            let mut last = Err("no VAXEE device found (VID 0x3057, usage page 0xFF05)".to_string());
+            let mut last = Err(Error::NotFound);
             for d in all {
                 if d.is_ok() {
                     return d;
@@ -220,16 +261,16 @@ mod hid {
         }
 
         /// 3954 sends tracking with data length 2 for reads and writes.
-        pub fn read_tracking(&self) -> Result<Vec<u8>, String> {
+        pub fn read_tracking(&self) -> Result<Vec<u8>, Error> {
             self.read(CMD_TRACKING, if self.is_3954() { 2 } else { 1 })
         }
 
         /// Send one command and read the reply, mirroring runAPI(): 5 tries.
-        pub fn transact(&self, cmd: u8, rw: u8, len: u8, data: &[u8]) -> Result<Vec<u8>, String> {
+        pub fn transact(&self, cmd: u8, rw: u8, len: u8, data: &[u8]) -> Result<Vec<u8>, Error> {
             let mut tx = vec![0u8; self.feature_len];
             tx[..5].copy_from_slice(&[REPORT_ID, HEADER, cmd, rw, len]);
             tx.get_mut(5..5 + data.len())
-                .ok_or("data too long")?
+                .ok_or(Error::DataTooLong)?
                 .copy_from_slice(data);
 
             for attempt in 1..=5 {
@@ -272,10 +313,10 @@ mod hid {
                 }
                 thread::sleep(Duration::from_millis(200));
             }
-            Err(format!("cmd 0x{cmd:02X}: no valid reply after 5 tries"))
+            Err(Error::NoReply { cmd })
         }
 
-        pub fn read(&self, cmd: u8, len: u8) -> Result<Vec<u8>, String> {
+        pub fn read(&self, cmd: u8, len: u8) -> Result<Vec<u8>, Error> {
             self.transact(cmd, READ, len, &[])
         }
 
@@ -297,7 +338,7 @@ mod hid {
         pub rate: u8,
     }
 
-    pub fn read_status(d: &Device) -> Result<Status, String> {
+    pub fn read_status(d: &Device) -> Result<Status, Error> {
         let wireless = d.is_wireless();
         // Mouse PID and charging status are wireless-only commands; wired PID is the HID PID itself.
         let mouse_pid = if wireless {
@@ -325,21 +366,21 @@ mod hid {
     }
 
     /// Set report rate index (1=500 .. 5=8000), refusing combos vcc disallows.
-    pub fn set_rate(d: &Device, rate: u8) -> Result<(), String> {
+    pub fn set_rate(d: &Device, rate: u8) -> Result<(), Error> {
         let (standard, _) = decode_tracking(&d.read_tracking()?);
         let max = max_rate(d.is_3954(), d.is_wireless(), standard);
         if !(1..=max).contains(&rate) {
-            return Err(format!("this mode supports up to {}", rate_name(max)));
+            return Err(Error::RateTooHigh { max });
         }
         d.transact(CMD_REPORT_RATE, WRITE, 1, &[rate]).map(|_| ())
     }
 
     /// Switch competitive/standard and Motion Sync. When entering standard mode the report
     /// rate is lowered first, because the firmware accepts out-of-range combos without clamping.
-    pub fn set_mode(d: &Device, standard: bool, motion_sync: bool) -> Result<(), String> {
+    pub fn set_mode(d: &Device, standard: bool, motion_sync: bool) -> Result<(), Error> {
         // vcc trackingWiredEnabled = [T,F,T,F]: standard modes are wireless-only.
         if standard && !d.is_wireless() {
-            return Err("standard mode is only available over the wireless receiver".into());
+            return Err(Error::StandardNeedsReceiver);
         }
         if standard {
             let max = max_rate(d.is_3954(), true, true);

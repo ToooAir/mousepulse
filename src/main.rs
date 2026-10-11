@@ -2,10 +2,11 @@
 
 #![windows_subsystem = "windows"]
 
-use std::{cell::RefCell, mem, ptr};
-use vaxee_tool::*;
+use std::{cell::RefCell, mem, ptr, sync::OnceLock};
+use vaxee_tool::{i18n::Strings, *};
 use windows_sys::Win32::{
     Foundation::*,
+    Globalization::GetUserDefaultUILanguage,
     Graphics::Gdi::*,
     System::LibraryLoader::{GetModuleFileNameW, GetModuleHandleW},
     System::Registry::*,
@@ -27,13 +28,24 @@ const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
 const RUN_VALUE: &str = "VaxeeTool";
 
 struct App {
-    status: Result<Status, String>,
+    status: Result<Status, Error>,
     icon: HICON,
     low_alerted: bool,
 }
 
 thread_local! {
-    static APP: RefCell<App> = RefCell::new(App { status: Err("尚未讀取".into()), icon: ptr::null_mut(), low_alerted: false });
+    static APP: RefCell<App> = const { RefCell::new(App { status: Err(Error::NotFound), icon: ptr::null_mut(), low_alerted: false }) };
+}
+
+/// UI strings for the Windows display language, chosen once at startup.
+fn t() -> &'static Strings {
+    static STRINGS: OnceLock<&'static Strings> = OnceLock::new();
+    STRINGS.get_or_init(|| {
+        std::env::args()
+            .find_map(|a| a.strip_prefix("--lang=").and_then(i18n::lang_from_arg))
+            .unwrap_or_else(|| i18n::lang_from_langid(unsafe { GetUserDefaultUILanguage() }))
+            .strings()
+    })
 }
 static mut TASKBAR_CREATED: u32 = 0;
 
@@ -49,27 +61,37 @@ fn copy_wide(dst: &mut [u16], s: &str) {
     }
 }
 
-/// "電量 20%-30%  約 11-15 小時", mirroring vcc's battery panel.
+/// "Battery 20%-30%  ~11-15 h left", mirroring vcc's battery panel.
 fn battery_line(s: &Status) -> String {
+    let t = t();
     let (label, eta) =
         match battery_estimate(s.mouse_pid, s.battery, s.charging, s.standard, s.rate) {
-            Some((label, "")) => (label.to_string(), "請立即充電".to_string()),
-            Some((label, h)) => (label.to_string(), format!("約 {h} 小時")),
+            Some((label, "")) => (label.to_string(), t.charge_now.to_string()),
+            Some((label, h)) => (label.to_string(), t.eta_hours.replace("{h}", h)),
             None => (format!("{}%", s.battery), String::new()),
         };
-    let charging = if s.charging { "（充電中）" } else { "" };
-    format!("電量 {label}{charging}  {eta}")
+    let charging = if s.charging { t.charging_suffix } else { "" };
+    t.battery_line
+        .replace("{label}", &label)
+        .replace("{charging}", charging)
+        .replace("{eta}", &eta)
 }
 
 fn mode_label(s: &Status) -> String {
-    format!(
-        "{}模式 (Motion Sync {})",
-        if s.standard { "標準" } else { "競技" },
-        if s.motion_sync { "開" } else { "關" }
-    )
+    let t = t();
+    t.mode_line
+        .replace(
+            "{mode}",
+            if s.standard {
+                t.standard
+            } else {
+                t.competitive
+            },
+        )
+        .replace("{ms}", if s.motion_sync { t.on } else { t.off })
 }
 
-fn tooltip(status: &Result<Status, String>) -> String {
+fn tooltip(status: &Result<Status, Error>) -> String {
     match status {
         Ok(s) => format!(
             "{}\n{}\n{}  {}",
@@ -78,7 +100,7 @@ fn tooltip(status: &Result<Status, String>) -> String {
             mode_label(s),
             rate_name(s.rate)
         ),
-        Err(e) => format!("VAXEE：未連線\n{e}"),
+        Err(e) => format!("{}\n{}", t().disconnected, t().error(e)),
     }
 }
 
@@ -206,10 +228,10 @@ unsafe fn show_low_battery(hwnd: HWND) {
     nid.uID = 1;
     nid.uFlags = NIF_INFO;
     nid.dwInfoFlags = NIIF_WARNING;
-    copy_wide(&mut nid.szInfoTitle, "VAXEE 電量過低");
+    copy_wide(&mut nid.szInfoTitle, t().low_battery_title);
     copy_wide(
         &mut nid.szInfo,
-        &format!("{name} 電量即將耗盡，請立即充電。"),
+        &t().low_battery_body.replace("{name}", name),
     );
     Shell_NotifyIconW(NIM_MODIFY, &nid);
 }
@@ -262,12 +284,12 @@ fn set_autostart(on: bool) -> Result<(), String> {
     if err == ERROR_SUCCESS {
         Ok(())
     } else {
-        Err(format!("無法修改開機自動啟動設定（錯誤碼 {err}）"))
+        Err(t().autostart_failed.replace("{code}", &err.to_string()))
     }
 }
 
 /// Competitive => 4000Hz, Standard => 1000Hz, keeping the current Motion Sync setting.
-fn switch_mode(standard: bool) -> Result<(), String> {
+fn switch_mode(standard: bool) -> Result<(), Error> {
     let d = Device::open()?;
     let s = read_status(&d)?;
     if standard {
@@ -286,7 +308,7 @@ fn switch_mode(standard: bool) -> Result<(), String> {
 }
 
 /// Flip Motion Sync, keeping the current mode and report rate (allowed in every mode).
-fn toggle_motion_sync() -> Result<(), String> {
+fn toggle_motion_sync() -> Result<(), Error> {
     let d = Device::open()?;
     let s = read_status(&d)?;
     set_mode(&d, s.standard, !s.motion_sync)
@@ -299,18 +321,19 @@ unsafe fn add_item(menu: HMENU, id: usize, text: &str, checked: bool, enabled: b
 }
 
 unsafe fn show_menu(hwnd: HWND) {
+    let t = t();
     let menu = CreatePopupMenu();
     APP.with_borrow(|app| {
         if let Ok(s) = &app.status {
-            add_item(menu, ID_COMPETITIVE, "競技模式 (4000Hz)", !s.standard, true);
+            add_item(menu, ID_COMPETITIVE, t.competitive_item, !s.standard, true);
+            add_item(menu, ID_STANDARD, t.standard_item, s.standard, s.wireless);
             add_item(
                 menu,
-                ID_STANDARD,
-                "標準模式 (1000Hz)",
-                s.standard,
-                s.wireless,
+                ID_MOTION_SYNC,
+                t.motion_sync_item,
+                s.motion_sync,
+                true,
             );
-            add_item(menu, ID_MOTION_SYNC, "Motion Sync", s.motion_sync, true);
 
             let rates = CreatePopupMenu();
             let max = max_rate(s.gen3954, s.wireless, s.standard);
@@ -325,19 +348,24 @@ unsafe fn show_menu(hwnd: HWND) {
                     allowed,
                 );
             }
-            AppendMenuW(menu, MF_POPUP, rates as usize, wide("回報率").as_ptr());
+            AppendMenuW(
+                menu,
+                MF_POPUP,
+                rates as usize,
+                wide(t.report_rate_item).as_ptr(),
+            );
             AppendMenuW(menu, MF_SEPARATOR, 0, ptr::null());
         }
     });
     add_item(
         menu,
         ID_AUTOSTART,
-        "開機自動啟動",
+        t.autostart_item,
         autostart_enabled(),
         true,
     );
-    add_item(menu, ID_REFRESH, "重新整理", false, true);
-    add_item(menu, ID_EXIT, "結束", false, true);
+    add_item(menu, ID_REFRESH, t.refresh_item, false, true);
+    add_item(menu, ID_EXIT, t.exit_item, false, true);
 
     let mut pt = POINT { x: 0, y: 0 };
     GetCursorPos(&mut pt);
@@ -362,10 +390,12 @@ unsafe fn show_menu(hwnd: HWND) {
         }
         ID_REFRESH => Ok(()),
         ID_AUTOSTART => set_autostart(!autostart_enabled()),
-        ID_COMPETITIVE => switch_mode(false),
-        ID_STANDARD => switch_mode(true),
-        ID_MOTION_SYNC => toggle_motion_sync(),
-        id => Device::open().and_then(|d| set_rate(&d, (id - ID_RATE_BASE) as u8)),
+        ID_COMPETITIVE => switch_mode(false).map_err(|e| t.error(&e)),
+        ID_STANDARD => switch_mode(true).map_err(|e| t.error(&e)),
+        ID_MOTION_SYNC => toggle_motion_sync().map_err(|e| t.error(&e)),
+        id => Device::open()
+            .and_then(|d| set_rate(&d, (id - ID_RATE_BASE) as u8))
+            .map_err(|e| t.error(&e)),
     };
     if let Err(e) = result {
         MessageBoxW(
@@ -410,7 +440,7 @@ fn main() {
         if GetLastError() == ERROR_ALREADY_EXISTS {
             MessageBoxW(
                 ptr::null_mut(),
-                wide("VAXEE 工具已在執行中，請查看系統匣。").as_ptr(),
+                wide(t().already_running).as_ptr(),
                 wide("VAXEE").as_ptr(),
                 MB_ICONINFORMATION,
             );

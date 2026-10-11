@@ -49,7 +49,10 @@ END
     let windres = if env::var("HOST") == env::var("TARGET") {
         "windres".to_string()
     } else {
-        format!("{}-w64-mingw32-windres", env::var("CARGO_CFG_TARGET_ARCH").unwrap())
+        format!(
+            "{}-w64-mingw32-windres",
+            env::var("CARGO_CFG_TARGET_ARCH").unwrap()
+        )
     };
     let status = Command::new(&windres)
         .args(["--output-format=coff", "--input"])
