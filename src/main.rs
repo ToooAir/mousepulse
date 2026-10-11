@@ -5,7 +5,12 @@
 use std::{cell::RefCell, mem, ptr};
 use vaxee_tool::*;
 use windows_sys::Win32::{
-    Foundation::*, Graphics::Gdi::*, System::LibraryLoader::GetModuleHandleW, UI::Shell::*,
+    Foundation::*,
+    Graphics::Gdi::*,
+    System::LibraryLoader::{GetModuleFileNameW, GetModuleHandleW},
+    System::Registry::*,
+    System::Threading::CreateMutexW,
+    UI::Shell::*,
     UI::WindowsAndMessaging::*,
 };
 
@@ -15,7 +20,10 @@ const ID_COMPETITIVE: usize = 1;
 const ID_STANDARD: usize = 2;
 const ID_REFRESH: usize = 3;
 const ID_EXIT: usize = 4;
-const ID_RATE_BASE: usize = 10; // + rate index 1-4
+const ID_AUTOSTART: usize = 5;
+const ID_RATE_BASE: usize = 10; // + rate index 1-5
+const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
+const RUN_VALUE: &str = "VaxeeTool";
 
 struct App {
     status: Result<Status, String>,
@@ -192,6 +200,58 @@ fn refresh(hwnd: HWND) {
     unsafe { notify(hwnd, NIM_MODIFY) };
 }
 
+/// Quoted path of this exe, as stored in the Run key.
+fn run_command() -> String {
+    let mut buf = [0u16; 1024];
+    let n = unsafe { GetModuleFileNameW(ptr::null_mut(), buf.as_mut_ptr(), buf.len() as u32) };
+    format!("\"{}\"", String::from_utf16_lossy(&buf[..n as usize]))
+}
+
+/// On only if the Run entry points at this exe, so a moved exe shows unchecked
+/// and re-enabling repairs the path.
+fn autostart_enabled() -> bool {
+    let mut buf = [0u16; 1024];
+    let mut size = mem::size_of_val(&buf) as u32;
+    let err = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            wide(RUN_KEY).as_ptr(),
+            wide(RUN_VALUE).as_ptr(),
+            RRF_RT_REG_SZ,
+            ptr::null_mut(),
+            buf.as_mut_ptr().cast(),
+            &mut size,
+        )
+    };
+    let len = (size as usize / 2).saturating_sub(1); // bytes incl. NUL -> chars
+    err == ERROR_SUCCESS && String::from_utf16_lossy(&buf[..len]) == run_command()
+}
+
+/// HKCU Run entry: per-user, no admin rights needed.
+fn set_autostart(on: bool) -> Result<(), String> {
+    let (key, name) = (wide(RUN_KEY), wide(RUN_VALUE));
+    let err = unsafe {
+        if on {
+            let data = wide(&run_command());
+            RegSetKeyValueW(
+                HKEY_CURRENT_USER,
+                key.as_ptr(),
+                name.as_ptr(),
+                REG_SZ,
+                data.as_ptr().cast(),
+                (data.len() * 2) as u32,
+            )
+        } else {
+            RegDeleteKeyValueW(HKEY_CURRENT_USER, key.as_ptr(), name.as_ptr())
+        }
+    };
+    if err == ERROR_SUCCESS {
+        Ok(())
+    } else {
+        Err(format!("無法修改開機自動啟動設定（錯誤碼 {err}）"))
+    }
+}
+
 /// Competitive => 4000Hz, Standard => 1000Hz, keeping the current Motion Sync setting.
 fn switch_mode(standard: bool) -> Result<(), String> {
     let d = Device::open()?;
@@ -247,6 +307,13 @@ unsafe fn show_menu(hwnd: HWND) {
             AppendMenuW(menu, MF_SEPARATOR, 0, ptr::null());
         }
     });
+    add_item(
+        menu,
+        ID_AUTOSTART,
+        "開機自動啟動",
+        autostart_enabled(),
+        true,
+    );
     add_item(menu, ID_REFRESH, "重新整理", false, true);
     add_item(menu, ID_EXIT, "結束", false, true);
 
@@ -272,6 +339,7 @@ unsafe fn show_menu(hwnd: HWND) {
             return;
         }
         ID_REFRESH => Ok(()),
+        ID_AUTOSTART => set_autostart(!autostart_enabled()),
         ID_COMPETITIVE => switch_mode(false),
         ID_STANDARD => switch_mode(true),
         id => Device::open().and_then(|d| set_rate(&d, (id - ID_RATE_BASE) as u8)),
@@ -312,6 +380,17 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
 
 fn main() {
     unsafe {
+        // One instance per user session; the mutex lives until the process exits.
+        CreateMutexW(ptr::null(), 0, wide("Local\\VaxeeTray").as_ptr());
+        if GetLastError() == ERROR_ALREADY_EXISTS {
+            MessageBoxW(
+                ptr::null_mut(),
+                wide("VAXEE 工具已在執行中，請查看系統匣。").as_ptr(),
+                wide("VAXEE").as_ptr(),
+                MB_ICONINFORMATION,
+            );
+            return;
+        }
         SetProcessDPIAware(); // crisp icon at the real small-icon size
         TASKBAR_CREATED = RegisterWindowMessageW(wide("TaskbarCreated").as_ptr());
 
