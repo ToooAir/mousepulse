@@ -4,6 +4,7 @@
 //! Response uses the same layout, so data starts at byte 5.
 
 mod bat_table;
+pub mod icon;
 #[cfg(windows)]
 pub use hid::*;
 

@@ -82,74 +82,44 @@ fn tooltip(status: &Result<Status, String>) -> String {
     }
 }
 
-/// Render `text` into a small-icon-sized HICON: GDI draws white-on-black, then the
-/// grey level becomes alpha so the anti-aliased digits blend on any taskbar.
-unsafe fn make_icon(text: &str, rgb: u32) -> HICON {
-    let size = GetSystemMetrics(SM_CXSMICON);
-    let screen = GetDC(ptr::null_mut());
-    let dc = CreateCompatibleDC(screen);
+/// Taskbar theme, so the battery outline stays visible on light and dark taskbars.
+fn taskbar_is_light() -> bool {
+    let mut value = 0u32;
+    let mut size = mem::size_of::<u32>() as u32;
+    let err = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            wide(r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize").as_ptr(),
+            wide("SystemUsesLightTheme").as_ptr(),
+            RRF_RT_REG_DWORD,
+            ptr::null_mut(),
+            (&mut value as *mut u32).cast(),
+            &mut size,
+        )
+    };
+    err == ERROR_SUCCESS && value == 1
+}
 
+/// Wrap straight-alpha ARGB pixels from `icon::battery` in an HICON.
+unsafe fn make_icon(size: i32, pixels: &[u32]) -> HICON {
     let mut bmi: BITMAPINFO = mem::zeroed();
     bmi.bmiHeader.biSize = mem::size_of::<BITMAPINFOHEADER>() as u32;
     bmi.bmiHeader.biWidth = size;
-    bmi.bmiHeader.biHeight = -size; // top-down
+    bmi.bmiHeader.biHeight = -size; // top-down, matching the pixel order
     bmi.bmiHeader.biPlanes = 1;
     bmi.bmiHeader.biBitCount = 32;
     let mut bits: *mut core::ffi::c_void = ptr::null_mut();
-    let color = CreateDIBSection(dc, &bmi, DIB_RGB_COLORS, &mut bits, ptr::null_mut(), 0);
-    let old_bmp = SelectObject(dc, color);
-
-    // Three digits ("100") need a smaller font to fit the square.
-    let em = if text.chars().count() >= 3 {
-        size * 5 / 8
-    } else {
-        size * 7 / 8
-    };
-    let face = wide("Segoe UI");
-    let font = CreateFontW(
-        -em,
+    let color = CreateDIBSection(
+        ptr::null_mut(),
+        &bmi,
+        DIB_RGB_COLORS,
+        &mut bits,
+        ptr::null_mut(),
         0,
-        0,
-        0,
-        700,
-        0,
-        0,
-        0,
-        1,
-        0,
-        0,
-        4, /* ANTIALIASED_QUALITY */
-        0,
-        face.as_ptr(),
     );
-    let old_font = SelectObject(dc, font);
-    SetTextColor(dc, 0x00FF_FFFF);
-    SetBkMode(dc, TRANSPARENT as _);
-    let mut rc = RECT {
-        left: 0,
-        top: 0,
-        right: size,
-        bottom: size,
-    };
-    let mut t = wide(text);
-    DrawTextW(
-        dc,
-        t.as_mut_ptr(),
-        -1,
-        &mut rc,
-        DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP,
-    );
-    GdiFlush();
+    ptr::copy_nonoverlapping(pixels.as_ptr(), bits as *mut u32, pixels.len());
 
-    let px = std::slice::from_raw_parts_mut(bits as *mut u32, (size * size) as usize);
-    for p in px.iter_mut() {
-        let a = *p & 0xFF; // grayscale AA, any channel works
-        *p = (a << 24) | (rgb & 0x00FF_FFFF);
-    }
-
-    SelectObject(dc, old_font);
-    SelectObject(dc, old_bmp);
-    let mask = CreateBitmap(size, size, 1, 1, ptr::null());
+    let mask = CreateBitmap(size, size, 1, 1, ptr::null()); // unused with 32bpp alpha
     let ii = ICONINFO {
         fIcon: 1,
         xHotspot: 0,
@@ -158,33 +128,35 @@ unsafe fn make_icon(text: &str, rgb: u32) -> HICON {
         hbmColor: color,
     };
     let icon = CreateIconIndirect(&ii);
-
-    DeleteObject(font);
     DeleteObject(mask);
     DeleteObject(color);
-    DeleteDC(dc);
-    ReleaseDC(ptr::null_mut(), screen);
     icon
 }
 
 unsafe fn notify(hwnd: HWND, action: u32) {
-    let (tip, text, rgb) = APP.with_borrow(|app| {
-        let (text, rgb) = match &app.status {
+    let size = GetSystemMetrics(SM_CXSMICON);
+    let outline = if taskbar_is_light() {
+        0x202020
+    } else {
+        0xFFFFFF
+    };
+    let (tip, pixels) = APP.with_borrow(|app| {
+        let pixels = match &app.status {
             // Same thresholds/colors as vcc: <20 red, 20-49 orange, else green.
-            Ok(s) => (
-                s.battery.min(99).to_string(), // "100" is unreadable at 16px; full shows 99
-                match s.battery {
+            Ok(s) => {
+                let fill = match s.battery {
                     0..=19 => 0xFF3B30,
                     20..=49 => 0xFFA500,
                     _ => 0x09BB3B,
-                },
-            ),
-            Err(_) => ("--".into(), 0x888888),
+                };
+                icon::battery(size as usize, Some(s.battery), s.charging, outline, fill)
+            }
+            Err(_) => icon::battery(size as usize, None, false, 0x888888, 0),
         };
-        (tooltip(&app.status), text, rgb)
+        (tooltip(&app.status), pixels)
     });
 
-    let icon = make_icon(&text, rgb);
+    let icon = make_icon(size, &pixels);
     let mut nid: NOTIFYICONDATAW = mem::zeroed();
     nid.cbSize = mem::size_of::<NOTIFYICONDATAW>() as u32;
     nid.hWnd = hwnd;
@@ -414,6 +386,8 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
             _ => {}
         },
         WM_TIMER => refresh(hwnd),
+        // Light/dark theme switch: redraw the outline color without re-reading the mouse.
+        WM_SETTINGCHANGE => notify(hwnd, NIM_MODIFY),
         WM_DESTROY => {
             let mut nid: NOTIFYICONDATAW = mem::zeroed();
             nid.cbSize = mem::size_of::<NOTIFYICONDATAW>() as u32;
