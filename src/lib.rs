@@ -389,6 +389,19 @@ pub fn tracking_name(r: &[u8]) -> String {
     }
 }
 
+/// vcc shows "charge now" at or below this percent while discharging (bat.js batLowHint).
+pub const LOW_BATTERY: u8 = 10;
+
+/// Low-battery alert latch: fire once when the battery reaches LOW_BATTERY while
+/// discharging; re-arm after charging or rising above it. Returns (fire, latched).
+pub fn low_battery_alert(latched: bool, percent: u8, charging: bool) -> (bool, bool) {
+    if charging || percent > LOW_BATTERY {
+        (false, false)
+    } else {
+        (!latched, true)
+    }
+}
+
 /// Battery cmd byte5 counts 5% steps, capped at 20 (bat.js).
 pub fn battery_percent(raw: u8) -> u8 {
     raw.min(20) * 5
@@ -474,6 +487,16 @@ mod tests {
         assert!(est(0x1015, 50, false, false, 5).is_some());
         assert!(est(0x1015, 50, false, true, RATE_4000).is_some());
         assert_eq!(est(0x9999, 50, false, false, RATE_1000), None);
+    }
+
+    #[test]
+    fn low_battery_fires_once_per_discharge() {
+        assert_eq!(low_battery_alert(false, 15, false), (false, false));
+        assert_eq!(low_battery_alert(false, 10, false), (true, true)); // first time at 10%
+        assert_eq!(low_battery_alert(true, 5, false), (false, true)); // already notified
+        assert_eq!(low_battery_alert(true, 5, true), (false, false)); // charging re-arms
+        assert_eq!(low_battery_alert(false, 5, true), (false, false)); // no alert while charging
+        assert_eq!(low_battery_alert(true, 15, false), (false, false)); // recovered re-arms
     }
 
     #[test]

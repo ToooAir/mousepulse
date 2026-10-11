@@ -28,15 +28,24 @@ const RUN_VALUE: &str = "VaxeeTool";
 struct App {
     status: Result<Status, String>,
     icon: HICON,
+    low_alerted: bool,
 }
 
 thread_local! {
-    static APP: RefCell<App> = RefCell::new(App { status: Err("尚未讀取".into()), icon: ptr::null_mut() });
+    static APP: RefCell<App> = RefCell::new(App { status: Err("尚未讀取".into()), icon: ptr::null_mut(), low_alerted: false });
 }
 static mut TASKBAR_CREATED: u32 = 0;
 
 fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain([0]).collect()
+}
+
+/// Copy into a fixed NUL-terminated WCHAR field, truncating to fit.
+fn copy_wide(dst: &mut [u16], s: &str) {
+    let max = dst.len() - 1;
+    for (d, c) in dst.iter_mut().zip(s.encode_utf16().take(max)) {
+        *d = c;
+    }
 }
 
 /// "電量 20%-30%  約 11-15 小時", mirroring vcc's battery panel.
@@ -182,9 +191,7 @@ unsafe fn notify(hwnd: HWND, action: u32) {
     nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
     nid.uCallbackMessage = WM_TRAY;
     nid.hIcon = icon;
-    for (dst, src) in nid.szTip.iter_mut().zip(tip.encode_utf16().take(127)) {
-        *dst = src;
-    }
+    copy_wide(&mut nid.szTip, &tip);
     Shell_NotifyIconW(action, &nid);
 
     let old = APP.with_borrow_mut(|app| mem::replace(&mut app.icon, icon));
@@ -196,8 +203,42 @@ unsafe fn notify(hwnd: HWND, action: u32) {
 // ponytail: HID calls run on the UI thread (~0.6s per refresh); move to a worker if the menu ever feels laggy.
 fn refresh(hwnd: HWND) {
     let status = Device::open().and_then(|d| read_status(&d));
-    APP.with_borrow_mut(|app| app.status = status);
-    unsafe { notify(hwnd, NIM_MODIFY) };
+    let fire = APP.with_borrow_mut(|app| {
+        app.status = status;
+        let Ok(s) = &app.status else {
+            return false; // keep the latch while disconnected
+        };
+        let (fire, latched) = low_battery_alert(app.low_alerted, s.battery, s.charging);
+        app.low_alerted = latched;
+        fire
+    });
+    unsafe {
+        notify(hwnd, NIM_MODIFY);
+        if fire {
+            show_low_battery(hwnd);
+        }
+    }
+}
+
+/// Tray balloon; Windows 10/11 shows it as a toast notification.
+unsafe fn show_low_battery(hwnd: HWND) {
+    let name = APP.with_borrow(|app| {
+        app.status
+            .as_ref()
+            .map_or("VAXEE", |s| device_name(s.mouse_pid))
+    });
+    let mut nid: NOTIFYICONDATAW = mem::zeroed();
+    nid.cbSize = mem::size_of::<NOTIFYICONDATAW>() as u32;
+    nid.hWnd = hwnd;
+    nid.uID = 1;
+    nid.uFlags = NIF_INFO;
+    nid.dwInfoFlags = NIIF_WARNING;
+    copy_wide(&mut nid.szInfoTitle, "VAXEE 電量過低");
+    copy_wide(
+        &mut nid.szInfo,
+        &format!("{name} 電量即將耗盡，請立即充電。"),
+    );
+    Shell_NotifyIconW(NIM_MODIFY, &nid);
 }
 
 /// Quoted path of this exe, as stored in the Run key.
@@ -421,6 +462,10 @@ fn main() {
         notify(hwnd, NIM_ADD);
         refresh(hwnd);
         SetTimer(hwnd, 1, POLL_MS, None);
+        // Lets you check the notification without draining the battery to 10%.
+        if std::env::args().any(|a| a == "--test-low-battery") {
+            show_low_battery(hwnd);
+        }
 
         let mut msg: MSG = mem::zeroed();
         while GetMessageW(&mut msg, ptr::null_mut(), 0, 0) > 0 {
