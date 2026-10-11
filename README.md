@@ -83,7 +83,8 @@ If you'd rather not run an unsigned binary, [build it yourself](#building).
 2. Run it. The battery icon appears in the notification area; if you can't see it,
    look under the `^` overflow.
 3. Hover for details, right-click for the menu, left-click to refresh now.
-   Otherwise the tool refreshes every 60 seconds.
+   Otherwise the tool refreshes every 60 seconds, and about a second after a
+   USB device (cable or receiver) is plugged in or removed.
 
 Close VAXEE Control Center while the tray app is running, because commands sent
 from both at the same time can interfere with each other.
@@ -213,8 +214,6 @@ cargo fmt
   Below 70% they are ranges, which reflects how coarse the battery reading is.
 - The tray app reads the mouse on the UI thread, so the menu can pause for about
   half a second during a refresh.
-- Plugging or unplugging the cable is picked up on the next refresh (at most
-  60 s, or left-click the icon).
 - User profiles (3954 receivers), DPI, debounce and button remapping are not
   exposed; use VAXEE Control Center for those.
 

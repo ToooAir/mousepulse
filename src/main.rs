@@ -17,6 +17,11 @@ use windows_sys::Win32::{
 
 const WM_TRAY: u32 = WM_APP + 1;
 const POLL_MS: u32 = 60_000;
+const TIMER_POLL: usize = 1;
+/// One-shot refresh after USB devices settle (cable or receiver plugged/unplugged).
+const TIMER_DEVICE: usize = 2;
+const DEVICE_SETTLE_MS: u32 = 1_000;
+const DBT_DEVNODES_CHANGED: usize = 0x0007;
 const ID_COMPETITIVE: usize = 1;
 const ID_STANDARD: usize = 2;
 const ID_REFRESH: usize = 3;
@@ -433,7 +438,17 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
             WM_LBUTTONUP => refresh(hwnd),
             _ => {}
         },
-        WM_TIMER => refresh(hwnd),
+        WM_TIMER => {
+            if wp == TIMER_DEVICE {
+                KillTimer(hwnd, TIMER_DEVICE);
+            }
+            refresh(hwnd);
+        }
+        // Broadcast to top-level windows on any device change. Re-arming the timer
+        // debounces the burst of events a single plug produces.
+        WM_DEVICECHANGE if wp == DBT_DEVNODES_CHANGED => {
+            SetTimer(hwnd, TIMER_DEVICE, DEVICE_SETTLE_MS, None);
+        }
         // Light/dark theme switch: redraw the outline color without re-reading the mouse.
         WM_SETTINGCHANGE => notify(hwnd, NIM_MODIFY),
         WM_DESTROY => {
@@ -494,7 +509,7 @@ fn main() {
 
         notify(hwnd, NIM_ADD);
         refresh(hwnd);
-        SetTimer(hwnd, 1, POLL_MS, None);
+        SetTimer(hwnd, TIMER_POLL, POLL_MS, None);
         // Lets you check the notification without draining the battery to 10%.
         if std::env::args().any(|a| a == "--test-low-battery") {
             show_low_battery(hwnd);
