@@ -21,6 +21,7 @@ const ID_STANDARD: usize = 2;
 const ID_REFRESH: usize = 3;
 const ID_EXIT: usize = 4;
 const ID_AUTOSTART: usize = 5;
+const ID_MOTION_SYNC: usize = 6;
 const ID_RATE_BASE: usize = 10; // + rate index 1-5
 const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
 const RUN_VALUE: &str = "VaxeeTool";
@@ -312,6 +313,13 @@ fn switch_mode(standard: bool) -> Result<(), String> {
     }
 }
 
+/// Flip Motion Sync, keeping the current mode and report rate (allowed in every mode).
+fn toggle_motion_sync() -> Result<(), String> {
+    let d = Device::open()?;
+    let s = read_status(&d)?;
+    set_mode(&d, s.standard, !s.motion_sync)
+}
+
 unsafe fn add_item(menu: HMENU, id: usize, text: &str, checked: bool, enabled: bool) {
     let flags =
         MF_STRING | if checked { MF_CHECKED } else { 0 } | if enabled { 0 } else { MF_GRAYED };
@@ -330,6 +338,7 @@ unsafe fn show_menu(hwnd: HWND) {
                 s.standard,
                 s.wireless,
             );
+            add_item(menu, ID_MOTION_SYNC, "Motion Sync", s.motion_sync, true);
 
             let rates = CreatePopupMenu();
             let max = max_rate(s.gen3954, s.wireless, s.standard);
@@ -383,6 +392,7 @@ unsafe fn show_menu(hwnd: HWND) {
         ID_AUTOSTART => set_autostart(!autostart_enabled()),
         ID_COMPETITIVE => switch_mode(false),
         ID_STANDARD => switch_mode(true),
+        ID_MOTION_SYNC => toggle_motion_sync(),
         id => Device::open().and_then(|d| set_rate(&d, (id - ID_RATE_BASE) as u8)),
     };
     if let Err(e) = result {
