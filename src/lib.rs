@@ -252,16 +252,10 @@ mod hid {
         /// Prefer the cabled mouse: once the cable is plugged in the mouse talks over USB and
         /// the receiver loses its link (reads time out), verified with NP-01S + receiver 2001.
         pub fn open() -> Result<Device, Error> {
-            let mut all = Device::open_all();
-            all.sort_by_key(|d| d.as_ref().map_or(2, |d| u8::from(d.is_wireless())));
-            let mut last = Err(Error::NotFound);
-            for d in all {
-                if d.is_ok() {
-                    return d;
-                }
-                last = d;
-            }
-            last
+            Device::open_all()
+                .into_iter()
+                .min_by_key(|d| d.as_ref().map_or(2, |d| u8::from(d.is_wireless())))
+                .unwrap_or(Err(Error::NotFound))
         }
 
         pub fn is_wireless(&self) -> bool {
