@@ -31,8 +31,6 @@ const ID_MOTION_SYNC: usize = 6;
 const ID_RATE_BASE: usize = 10; // + rate index 1-5
 const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
 const RUN_VALUE: &str = "MousePulse";
-/// Run value used before the rename to MousePulse.
-const LEGACY_RUN_VALUE: &str = "VaxeeTool";
 const APP_NAME: &str = "MousePulse";
 
 struct App {
@@ -296,21 +294,6 @@ fn set_autostart(on: bool) -> Result<(), String> {
     }
 }
 
-/// Builds before the rename registered autostart as "VaxeeTool" pointing at
-/// vaxee-tool.exe. Move that choice to the new entry so only this exe starts.
-fn migrate_legacy_autostart() {
-    let err = unsafe {
-        RegDeleteKeyValueW(
-            HKEY_CURRENT_USER,
-            wide(RUN_KEY).as_ptr(),
-            wide(LEGACY_RUN_VALUE).as_ptr(),
-        )
-    };
-    if err == ERROR_SUCCESS {
-        let _ = set_autostart(true);
-    }
-}
-
 /// Competitive => 4000Hz, Standard => 1000Hz, keeping the current Motion Sync setting.
 fn switch_mode(standard: bool) -> Result<(), Error> {
     let d = Device::open()?;
@@ -479,7 +462,6 @@ fn main() {
             );
             return;
         }
-        migrate_legacy_autostart();
         SetProcessDPIAware(); // crisp icon at the real small-icon size
         TASKBAR_CREATED = RegisterWindowMessageW(wide("TaskbarCreated").as_ptr());
 
