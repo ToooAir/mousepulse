@@ -13,6 +13,15 @@ fn open() -> Result<Device, String> {
     Ok(d)
 }
 
+fn tracking(r: &[u8]) -> String {
+    let (standard, ms) = decode_tracking(r);
+    format!(
+        "{} / Motion Sync {}",
+        if standard { "Standard" } else { "Competitive" },
+        if ms { "on" } else { "off" }
+    )
+}
+
 fn info(d: &Device) -> Result<(), String> {
     let mut lines = Vec::new();
 
@@ -40,7 +49,7 @@ fn info(d: &Device) -> Result<(), String> {
     let r = d.read_tracking()?;
     lines.push(format!(
         "tracking      : {} (raw len={} val={})",
-        tracking_name(&r),
+        tracking(&r),
         r[4],
         r[5]
     ));
@@ -75,7 +84,7 @@ fn read_back(d: &Device) -> Result<(), String> {
     let r = d.read(CMD_REPORT_RATE, 1)?;
     println!(
         "\ntracking    : {}\nreport rate : {}",
-        tracking_name(&t),
+        tracking(&t),
         rate_name(r[5])
     );
     Ok(())

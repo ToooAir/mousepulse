@@ -459,19 +459,6 @@ pub fn max_rate(gen3954: bool, wireless: bool, standard: bool) -> u8 {
     }
 }
 
-pub fn tracking_name(r: &[u8]) -> String {
-    match (r[4], r[5]) {
-        // Newer 3954 format: data length 2, byte5 0=standard 1=gaming (device_factory.js).
-        (2, 0) => format!("Standard (2-byte format, byte6=0x{:02X})", r[6]),
-        (2, 1) => format!("Competitive (2-byte format, byte6=0x{:02X})", r[6]),
-        (_, 1) => "Competitive / Motion Sync off".into(),
-        (_, 2) => "Standard / Motion Sync off".into(),
-        (_, 3) => "Competitive / Motion Sync on".into(),
-        (_, 4) => "Standard / Motion Sync on".into(),
-        _ => "?".into(),
-    }
-}
-
 /// vcc shows "charge now" at or below this percent while discharging (bat.js batLowHint).
 pub const LOW_BATTERY: u8 = 10;
 
