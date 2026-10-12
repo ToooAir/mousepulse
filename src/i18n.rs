@@ -71,8 +71,8 @@ pub struct Strings {
 }
 
 pub const ZH_HANT: Strings = Strings {
-    competitive_item: "競技模式 (4000Hz)",
-    standard_item: "標準模式 (1000Hz)",
+    competitive_item: "競技模式",
+    standard_item: "標準模式",
     motion_sync_item: "Motion Sync",
     report_rate_item: "回報率",
     autostart_item: "開機自動啟動",
@@ -101,8 +101,8 @@ pub const ZH_HANT: Strings = Strings {
 };
 
 pub const ZH_HANS: Strings = Strings {
-    competitive_item: "竞技模式 (4000Hz)",
-    standard_item: "标准模式 (1000Hz)",
+    competitive_item: "竞技模式",
+    standard_item: "标准模式",
     motion_sync_item: "Motion Sync",
     report_rate_item: "回报率",
     autostart_item: "开机自动启动",
@@ -131,8 +131,8 @@ pub const ZH_HANS: Strings = Strings {
 };
 
 pub const EN: Strings = Strings {
-    competitive_item: "Competitive mode (4000Hz)",
-    standard_item: "Standard mode (1000Hz)",
+    competitive_item: "Competitive mode",
+    standard_item: "Standard mode",
     motion_sync_item: "Motion Sync",
     report_rate_item: "Report rate",
     autostart_item: "Start with Windows",

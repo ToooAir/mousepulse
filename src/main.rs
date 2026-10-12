@@ -294,7 +294,17 @@ fn set_autostart(on: bool) -> Result<(), String> {
     }
 }
 
-/// Competitive => 4000Hz, Standard => 1000Hz, keeping the current Motion Sync setting.
+/// Rate set by the Competitive item: 4000Hz over the receiver (8000Hz on 3954 stays a
+/// manual choice), 1000Hz by cable, which is the wired maximum.
+fn competitive_rate(wireless: bool) -> u8 {
+    if wireless {
+        RATE_4000
+    } else {
+        RATE_1000
+    }
+}
+
+/// Competitive => competitive_rate, Standard => 1000Hz, keeping the current Motion Sync setting.
 fn switch_mode(standard: bool) -> Result<(), Error> {
     let d = Device::open()?;
     let s = read_status(&d)?;
@@ -304,12 +314,7 @@ fn switch_mode(standard: bool) -> Result<(), Error> {
         set_mode(&d, true, s.motion_sync)
     } else {
         set_mode(&d, false, s.motion_sync)?;
-        // Wired mice cap at 1000Hz, so only raise the rate over the receiver.
-        if d.is_wireless() {
-            set_rate(&d, RATE_4000)
-        } else {
-            Ok(())
-        }
+        set_rate(&d, competitive_rate(d.is_wireless()))
     }
 }
 
@@ -331,8 +336,21 @@ unsafe fn show_menu(hwnd: HWND) {
     let menu = CreatePopupMenu();
     APP.with_borrow(|app| {
         if let Ok(s) = &app.status {
-            add_item(menu, ID_COMPETITIVE, t.competitive_item, !s.standard, true);
-            add_item(menu, ID_STANDARD, t.standard_item, s.standard, s.wireless);
+            let label = |item, rate| format!("{item} ({})", rate_name(rate));
+            add_item(
+                menu,
+                ID_COMPETITIVE,
+                &label(t.competitive_item, competitive_rate(s.wireless)),
+                !s.standard,
+                true,
+            );
+            add_item(
+                menu,
+                ID_STANDARD,
+                &label(t.standard_item, RATE_1000),
+                s.standard,
+                s.wireless,
+            );
             add_item(
                 menu,
                 ID_MOTION_SYNC,

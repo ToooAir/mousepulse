@@ -27,7 +27,7 @@ open a browser just to check the battery.
   rate. Battery labels and runtimes are taken verbatim from VAXEE Control Center,
   so both show the same values (for example `50%-70%`, `27.5-37 h`).
 - **Right-click menu**
-  - Competitive mode (also sets 4000 Hz over the receiver)
+  - Competitive mode (also sets 4000 Hz over the receiver, 1000 Hz by cable)
   - Standard mode (also sets 1000 Hz)
   - Motion Sync on/off, keeping the current mode
   - Report rate submenu; rates the current mode doesn't allow are greyed out
