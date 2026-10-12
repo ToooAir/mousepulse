@@ -12,11 +12,6 @@ open a browser just to check the battery.
 > **Unofficial.** This project is not affiliated with or endorsed by VAXEE.
 > Product names are used only to identify compatible hardware.
 
-<p align="center">
-  <img src="docs/screenshots/icon-english.jpg" alt="Tray tooltip: model, battery 95% (charging) with about 52 hours left, Competitive mode at 1000Hz" height="180">
-  <img src="docs/screenshots/menu-english.jpg" alt="Tray menu: Competitive and Standard mode, Motion Sync, Report rate, Start with Windows, Refresh, Exit" height="180">
-</p>
-
 ## Features
 
 - **Battery icon in the tray.** Fill level and color follow the battery
@@ -26,6 +21,9 @@ open a browser just to check the battery.
 - **Tooltip** with the model, battery, remaining runtime, current mode and report
   rate. Battery labels and runtimes are taken verbatim from VAXEE Control Center,
   so both show the same values (for example `50%-70%`, `27.5-37 h`).
+
+  <img src="docs/screenshots/icon-english.jpg" alt="Tray tooltip: model, battery 95% with about 33 hours left, Competitive mode at 4000Hz">
+
 - **Right-click menu**
   - Competitive mode (also sets 4000 Hz over the receiver, 1000 Hz by cable)
   - Standard mode (also sets 1000 Hz)
@@ -33,6 +31,9 @@ open a browser just to check the battery.
   - Report rate submenu; rates the current mode doesn't allow are greyed out
   - Start with Windows
   - Refresh / Exit
+
+  <img src="docs/screenshots/menu-english.jpg" alt="Tray menu: Competitive (4000Hz) and Standard (1000Hz) mode, Motion Sync, Report rate, Start with Windows, Refresh, Exit">
+
 - **Low-battery notification**, once per discharge, at 10% (the same "charge now"
   threshold as the official driver).
 - Works over the receiver or the charging cable. When both are plugged in, the
