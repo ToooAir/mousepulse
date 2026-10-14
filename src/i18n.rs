@@ -44,6 +44,7 @@ pub struct Strings {
     pub report_rate_item: &'static str,
     pub autostart_item: &'static str,
     pub refresh_item: &'static str,
+    pub copy_info_item: &'static str,
     pub exit_item: &'static str,
     // Tooltip
     pub battery_line: &'static str, // {label} {charging} {eta}
@@ -60,6 +61,7 @@ pub struct Strings {
     pub low_battery_title: &'static str,
     pub low_battery_body: &'static str, // {name}
     pub already_running: &'static str,
+    pub copy_info_done: &'static str,
     pub autostart_failed: &'static str, // {code}
     // Errors
     pub err_not_found: &'static str,
@@ -77,6 +79,7 @@ pub const ZH_HANT: Strings = Strings {
     report_rate_item: "回報率",
     autostart_item: "開機自動啟動",
     refresh_item: "重新整理",
+    copy_info_item: "複製裝置資訊",
     exit_item: "結束",
     battery_line: "電量 {label}{charging}  {eta}",
     charging_suffix: "（充電中）",
@@ -91,6 +94,7 @@ pub const ZH_HANT: Strings = Strings {
     low_battery_title: "VAXEE 電量過低",
     low_battery_body: "{name} 電量即將耗盡，請立即充電。",
     already_running: "MousePulse 已在執行中，請查看系統匣。",
+    copy_info_done: "裝置資訊已複製到剪貼簿，請貼到 GitHub issue。",
     autostart_failed: "無法修改開機自動啟動設定（錯誤碼 {code}）",
     err_not_found: "找不到 VAXEE 滑鼠",
     err_open: "無法開啟裝置（錯誤碼 {code}）",
@@ -107,6 +111,7 @@ pub const ZH_HANS: Strings = Strings {
     report_rate_item: "回报率",
     autostart_item: "开机自动启动",
     refresh_item: "刷新",
+    copy_info_item: "复制设备信息",
     exit_item: "退出",
     battery_line: "电量 {label}{charging}  {eta}",
     charging_suffix: "（充电中）",
@@ -121,6 +126,7 @@ pub const ZH_HANS: Strings = Strings {
     low_battery_title: "VAXEE 电量过低",
     low_battery_body: "{name} 电量即将耗尽，请立即充电。",
     already_running: "MousePulse 已在运行，请查看系统托盘。",
+    copy_info_done: "设备信息已复制到剪贴板，请粘贴到 GitHub issue。",
     autostart_failed: "无法修改开机自动启动设置（错误码 {code}）",
     err_not_found: "找不到 VAXEE 鼠标",
     err_open: "无法打开设备（错误码 {code}）",
@@ -137,6 +143,7 @@ pub const EN: Strings = Strings {
     report_rate_item: "Report rate",
     autostart_item: "Start with Windows",
     refresh_item: "Refresh",
+    copy_info_item: "Copy device info",
     exit_item: "Exit",
     battery_line: "Battery {label}{charging}  {eta}",
     charging_suffix: " (charging)",
@@ -151,6 +158,7 @@ pub const EN: Strings = Strings {
     low_battery_title: "VAXEE battery low",
     low_battery_body: "{name} is almost out of battery. Charge it now.",
     already_running: "MousePulse is already running. Look for it in the system tray.",
+    copy_info_done: "Device info copied to the clipboard. Paste it into the GitHub issue.",
     autostart_failed: "Could not change the startup setting (error {code}).",
     err_not_found: "No VAXEE mouse found",
     err_open: "Could not open the device (error {code})",

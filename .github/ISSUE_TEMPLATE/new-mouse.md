@@ -7,15 +7,10 @@ labels: new-mouse
 
 **Model** (as shown in [VAXEE Control Center](https://vcc.vaxee.co/)):
 
-**Connection used for the output below** (receiver / charging cable):
+**Connected via** (receiver / charging cable) when you copied the device info:
 
-**`mousepulse-cli.exe probe`**
-
-```
-paste here
-```
-
-**`mousepulse-cli.exe list`**
+**Device info**: right-click the MousePulse tray icon, choose **Copy device info**,
+and paste it here. (Same as `mousepulse-cli.exe list` + `probe`.)
 
 ```
 paste here

@@ -30,7 +30,9 @@ open a browser just to check the battery.
   - Motion Sync on/off, keeping the current mode
   - Report rate submenu; rates the current mode doesn't allow are greyed out
   - Start with Windows
-  - Refresh / Exit
+  - Refresh
+  - Copy device info, for reporting a mouse MousePulse doesn't recognise yet
+  - Exit
 
   <img src="docs/screenshots/menu-english.jpg" alt="Tray menu: Competitive (4000Hz) and Standard (1000Hz) mode, Motion Sync, Report rate, Start with Windows, Refresh, Exit">
 

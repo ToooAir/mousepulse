@@ -28,6 +28,7 @@ const ID_REFRESH: usize = 3;
 const ID_EXIT: usize = 4;
 const ID_AUTOSTART: usize = 5;
 const ID_MOTION_SYNC: usize = 6;
+const ID_COPY_INFO: usize = 7;
 const ID_RATE_BASE: usize = 10; // + rate index 1-5
 const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
 const RUN_VALUE: &str = "MousePulse";
@@ -325,6 +326,33 @@ fn toggle_motion_sync() -> Result<(), Error> {
     set_mode(&d, s.standard, !s.motion_sync)
 }
 
+/// Version plus the CLI `list` and `probe` output, for "new mouse" issues.
+fn copy_device_info() -> Result<(), String> {
+    use std::{io::Write, os::windows::process::CommandExt, process};
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let text = format!(
+        "MousePulse {}\n\n{}\n{}",
+        env!("CARGO_PKG_VERSION"),
+        list_report(),
+        probe_report()
+    );
+    // clip.exe ships with Windows. It reads stdin in the console code page, which is
+    // fine here: the report is ASCII (device paths, model names, English errors).
+    let fail = |e: std::io::Error| t().err_internal.replace("{detail}", &e.to_string());
+    let mut clip = process::Command::new("clip")
+        .creation_flags(CREATE_NO_WINDOW)
+        .stdin(process::Stdio::piped())
+        .spawn()
+        .map_err(fail)?;
+    clip.stdin
+        .take()
+        .unwrap()
+        .write_all(text.as_bytes())
+        .map_err(fail)?;
+    clip.wait().map_err(fail)?;
+    Ok(())
+}
+
 unsafe fn add_item(menu: HMENU, id: usize, text: &str, checked: bool, enabled: bool) {
     let flags =
         MF_STRING | if checked { MF_CHECKED } else { 0 } | if enabled { 0 } else { MF_GRAYED };
@@ -389,6 +417,7 @@ unsafe fn show_menu(hwnd: HWND) {
         true,
     );
     add_item(menu, ID_REFRESH, t.refresh_item, false, true);
+    add_item(menu, ID_COPY_INFO, t.copy_info_item, false, true);
     add_item(menu, ID_EXIT, t.exit_item, false, true);
 
     let mut pt = POINT { x: 0, y: 0 };
@@ -413,6 +442,14 @@ unsafe fn show_menu(hwnd: HWND) {
             return;
         }
         ID_REFRESH => Ok(()),
+        ID_COPY_INFO => copy_device_info().map(|()| {
+            MessageBoxW(
+                hwnd,
+                wide(t.copy_info_done).as_ptr(),
+                wide(APP_NAME).as_ptr(),
+                MB_ICONINFORMATION,
+            );
+        }),
         ID_AUTOSTART => set_autostart(!autostart_enabled()),
         ID_COMPETITIVE => switch_mode(false).map_err(|e| t.error(&e)),
         ID_STANDARD => switch_mode(true).map_err(|e| t.error(&e)),

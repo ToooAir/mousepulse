@@ -377,6 +377,53 @@ mod hid {
         })
     }
 
+    /// Every VAXEE HID collection, one per line (`mousepulse-cli list`).
+    pub fn list_report() -> String {
+        let all = enumerate();
+        if all.is_empty() {
+            return format!("no HID collections with VID 0x{VID:04X}\n");
+        }
+        all.iter()
+            .map(|d| {
+                format!(
+                    "PID {:04X}  usage {:04X}:{:04X}  feature {:>3}B  {}\n",
+                    d.pid,
+                    d.usage_page,
+                    d.usage,
+                    d.feature_len,
+                    String::from_utf16_lossy(&d.path[..d.path.len() - 1])
+                )
+            })
+            .collect()
+    }
+
+    /// Status read from every VAXEE device, receiver and cable (`mousepulse-cli probe`).
+    pub fn probe_report() -> String {
+        let line = |d: Result<Device, Error>| {
+            let d = d?;
+            let s = read_status(&d).map_err(|e| format!("PID {:04X}: {e}", d.pid))?;
+            Ok::<_, String>(format!(
+                "PID {:04X} ({})  mouse {:04X}  battery {}%  charging {}  {} / MS {}  {}",
+                d.pid,
+                if s.wireless { "receiver" } else { "cable" },
+                s.mouse_pid,
+                s.battery,
+                s.charging,
+                if s.standard {
+                    "standard"
+                } else {
+                    "competitive"
+                },
+                if s.motion_sync { "on" } else { "off" },
+                rate_name(s.rate),
+            ))
+        };
+        Device::open_all()
+            .into_iter()
+            .map(|d| line(d).unwrap_or_else(|e| e) + "\n")
+            .collect()
+    }
+
     /// Set report rate index (1=500 .. 5=8000), refusing combos vcc disallows.
     pub fn set_rate(d: &Device, rate: u8) -> Result<(), Error> {
         let (standard, _) = decode_tracking(&d.read_tracking()?);

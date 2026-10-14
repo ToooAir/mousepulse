@@ -26,7 +26,9 @@
   - Motion Sync 開關，切換時維持目前的模式
   - 回報率子選單：目前模式不支援的回報率會反灰
   - 開機自動啟動
-  - 重新整理／結束
+  - 重新整理
+  - 複製裝置資訊：回報 MousePulse 還不認得的滑鼠時使用
+  - 結束
 
   <img src="docs/screenshots/menu-chinese.jpg" alt="右鍵選單：競技模式 (4000Hz)、標準模式 (1000Hz)、Motion Sync、回報率、開機自動啟動、重新整理、結束">
 

@@ -105,45 +105,11 @@ fn run(args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
         None | Some("info") => info(&open()?),
         Some("probe") => {
-            for d in Device::open_all() {
-                let d = match d {
-                    Ok(d) => d,
-                    Err(e) => {
-                        println!("{e}");
-                        continue;
-                    }
-                };
-                match read_status(&d).map(|s| (d.pid, s)) {
-                    Ok((pid, s)) => println!(
-                        "PID {pid:04X} ({})  mouse {:04X}  battery {}%  charging {}  {} / MS {}  {}",
-                        if s.wireless { "receiver" } else { "cable" },
-                        s.mouse_pid,
-                        s.battery,
-                        s.charging,
-                        if s.standard { "standard" } else { "competitive" },
-                        if s.motion_sync { "on" } else { "off" },
-                        rate_name(s.rate),
-                    ),
-                    Err(e) => println!("PID {:04X}: {e}", d.pid),
-                }
-            }
+            print!("{}", probe_report());
             Ok(())
         }
         Some("list") => {
-            let all = enumerate();
-            if all.is_empty() {
-                println!("no HID collections with VID 0x{VID:04X}");
-            }
-            for d in all {
-                println!(
-                    "PID {:04X}  usage {:04X}:{:04X}  feature {:>3}B  {}",
-                    d.pid,
-                    d.usage_page,
-                    d.usage,
-                    d.feature_len,
-                    String::from_utf16_lossy(&d.path[..d.path.len() - 1])
-                );
-            }
+            print!("{}", list_report());
             Ok(())
         }
         Some("mode") => {
