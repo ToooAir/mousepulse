@@ -8,7 +8,9 @@ use windows_sys::Win32::{
     Foundation::*,
     Globalization::GetUserDefaultUILanguage,
     Graphics::Gdi::*,
+    System::DataExchange::{CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData},
     System::LibraryLoader::{GetModuleFileNameW, GetModuleHandleW},
+    System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE},
     System::Registry::*,
     System::Threading::CreateMutexW,
     UI::Shell::*,
@@ -327,30 +329,38 @@ fn toggle_motion_sync() -> Result<(), Error> {
 }
 
 /// Version plus the CLI `list` and `probe` output, for "new mouse" issues.
-fn copy_device_info() -> Result<(), String> {
-    use std::{io::Write, os::windows::process::CommandExt, process};
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+fn copy_device_info(hwnd: HWND) -> Result<(), String> {
+    const CF_UNICODETEXT: u32 = 13;
     let text = format!(
         "MousePulse {}\n\n{}\n{}",
         env!("CARGO_PKG_VERSION"),
         list_report(),
         probe_report()
     );
-    // clip.exe ships with Windows. It reads stdin in the console code page, which is
-    // fine here: the report is ASCII (device paths, model names, English errors).
-    let fail = |e: std::io::Error| t().err_internal.replace("{detail}", &e.to_string());
-    let mut clip = process::Command::new("clip")
-        .creation_flags(CREATE_NO_WINDOW)
-        .stdin(process::Stdio::piped())
-        .spawn()
-        .map_err(fail)?;
-    clip.stdin
-        .take()
-        .unwrap()
-        .write_all(text.as_bytes())
-        .map_err(fail)?;
-    clip.wait().map_err(fail)?;
-    Ok(())
+    let text = wide(&text.replace('\n', "\r\n"));
+    unsafe {
+        if OpenClipboard(hwnd) == 0 {
+            return Err(t().err_internal.replace("{detail}", "OpenClipboard"));
+        }
+        EmptyClipboard();
+        // On success the clipboard owns the memory; free it only if handing it over failed.
+        let mem = GlobalAlloc(GMEM_MOVEABLE, text.len() * 2);
+        let p = GlobalLock(mem) as *mut u16;
+        let ok = !p.is_null() && {
+            ptr::copy_nonoverlapping(text.as_ptr(), p, text.len());
+            GlobalUnlock(mem);
+            !SetClipboardData(CF_UNICODETEXT, mem).is_null()
+        };
+        if !ok && !mem.is_null() {
+            GlobalFree(mem);
+        }
+        CloseClipboard();
+        if ok {
+            Ok(())
+        } else {
+            Err(t().err_internal.replace("{detail}", "SetClipboardData"))
+        }
+    }
 }
 
 unsafe fn add_item(menu: HMENU, id: usize, text: &str, checked: bool, enabled: bool) {
@@ -442,7 +452,7 @@ unsafe fn show_menu(hwnd: HWND) {
             return;
         }
         ID_REFRESH => Ok(()),
-        ID_COPY_INFO => copy_device_info().map(|()| {
+        ID_COPY_INFO => copy_device_info(hwnd).map(|()| {
             MessageBoxW(
                 hwnd,
                 wide(t.copy_info_done).as_ptr(),
