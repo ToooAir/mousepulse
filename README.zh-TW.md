@@ -30,7 +30,7 @@
   - 複製裝置資訊：回報 MousePulse 還不認得的滑鼠時使用
   - 結束
 
-  <img src="docs/screenshots/menu-chinese.jpg" alt="右鍵選單：競技模式 (4000Hz)、標準模式 (1000Hz)、Motion Sync、回報率、開機自動啟動、重新整理、結束">
+  <img src="docs/screenshots/menu-chinese.jpg" alt="右鍵選單：競技模式 (4000Hz)、標準模式 (1000Hz)、Motion Sync、回報率、開機自動啟動、重新整理、複製裝置資訊、結束">
 
 - **低電量通知**：電量降到 10% 時通知一次，門檻和官方驅動顯示「請立即充電」的條件相同。
 - 透過接收器或充電線連接都可以使用。兩者同時接上時會使用充電線連接，因為這時接收器和滑鼠的連線已經中斷。
