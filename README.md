@@ -115,7 +115,8 @@ The firmware itself accepts out-of-range combinations, such as Standard mode at
 | NP-01S V3 / NP-01 Ergo          | 1014, 1015 | 3954  | Implemented from the official driver's code, untested |
 
 Receivers: 1001, 1002, 2001 (4K/8K), 2002 (8K). If your mouse works (or doesn't),
-an issue with the output of `mousepulse-cli probe` is very welcome.
+please [open an issue](https://github.com/ToooAir/mousepulse/issues/new?template=new-mouse.md):
+right-click the MousePulse tray icon → **Copy device info** and paste it in.
 
 ## Command-line tool
 

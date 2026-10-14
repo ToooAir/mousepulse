@@ -101,7 +101,8 @@ Get-FileHash .\mousepulse.exe -Algorithm SHA256
 | NP-01S V3 / NP-01 Ergo           | 1014、1015 | 3954   | 依官方驅動程式碼實作，未實測 |
 
 接收器：1001、1002、2001（4K/8K）、2002（8K）。如果你的滑鼠可以使用（或不能使用），
-歡迎開 issue 並附上 `mousepulse-cli probe` 的輸出。
+歡迎[開 issue](https://github.com/ToooAir/mousepulse/issues/new?template=new-mouse.md)：
+在 MousePulse 系統匣圖示按右鍵 → **Copy device info**，把內容貼上即可。
 
 ## 命令列工具
 
